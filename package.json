@@ -1,0 +1,12 @@
+{
+  "name": "my-location-guide",
+  "version": "1.0.0",
+  "description": "나만의 위치 안내 서비스",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
