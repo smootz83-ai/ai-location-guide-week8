@@ -14,22 +14,56 @@
     <div id="map"></div>
   </div>
 
+  <!-- 
+    카카오맵 JavaScript SDK 불러오기
+    appkey= 뒤에 발급받으신 카카오맵 JavaScript 키를 입력하는 부분입니다.
+    현재는 이미 전달해주신 키(30c689a44af9d4aadb7b449a0a2eb2e9)가 적용되어 있습니다.
+  -->
   <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=30c689a44af9d4aadb7b449a0a2eb2e9"></script>
+  
   <script>
-    // 지도 초기화
+    // 1. 지도를 표시할 HTML 태그(div)를 가져옵니다.
     const container = document.getElementById('map');
+    
+    // 2. 지도를 생성할 때 필요한 기본 옵션을 설정합니다.
     const options = {
-      center: new kakao.maps.LatLng(37.566826, 126.9786567), // 서울시청 기준
-      level: 3
+      center: new kakao.maps.LatLng(37.566826, 126.9786567), // 지도의 중심 좌표 (서울시청 위도, 경도)
+      level: 3 // 지도의 확대 레벨 (숫자가 작을수록 확대됨)
     };
+    
+    // 3. 지도를 실제로 생성합니다.
     const map = new kakao.maps.Map(container, options);
 
-    // 마커 추가
+    // 4. 지도 위에 표시할 마커의 위치를 지정합니다 (서울시청 좌표).
     const markerPosition = new kakao.maps.LatLng(37.566826, 126.9786567);
+    
+    // 5. 마커 객체를 생성합니다.
     const marker = new kakao.maps.Marker({
       position: markerPosition
     });
+    
+    // 6. 생성한 마커를 지도 위에 올립니다.
     marker.setMap(map);
+
+    // 7. 마커를 클릭했을 때 나타날 정보창(InfoWindow)의 내용을 작성합니다.
+    // 글자 크기와 레이아웃을 다듬기 위한 HTML/CSS 스타일이 들어가 있습니다.
+    const iwContent = `
+      <div style="padding: 10px 15px; font-size: 14px; color: #333333; font-weight: bold; text-align: center; font-family: '맑은 고딕', sans-serif;">
+        📍 오늘의 위치 안내 장소
+      </div>
+    `;
+
+    // 8. 정보창 객체를 생성합니다.
+    const infowindow = new kakao.maps.InfoWindow({
+      content: iwContent,
+      removable: true // 사용자가 닫기 버튼(X)을 눌러 닫을 수 있게 설정합니다.
+    });
+
+    // 9. 마커에 클릭 이벤트를 등록합니다.
+    // 마커를 클릭하면 정보창이 지도(map)의 해당 마커(marker) 위에 열리게 됩니다.
+    kakao.maps.event.addListener(marker, 'click', function() {
+      infowindow.open(map, marker);
+    });
   </script>
 </body>
 </html>
