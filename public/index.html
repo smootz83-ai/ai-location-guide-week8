@@ -9,38 +9,39 @@
 </head>
 <body>
   <div class="container">
+    <!-- 1. 메인 타이틀 및 설명 -->
     <h1>📍 나만의 위치 안내 서비스</h1>
     <p class="description">내 주변의 장소를 쉽고 빠르게 찾아보세요.</p>
     
-    <!-- 앱 레이아웃 컨테이너 (지도와 장소 정보 판넬을 감쌉니다) -->
-    <div class="app-layout">
-      <!-- 1. 카카오맵 지도 영역 -->
-      <div id="map"></div>
-      
-      <!-- 2. 장소 정보 및 버튼 컨트롤 영역 -->
-      <div class="places-panel">
-        <!-- 현재 선택된 장소의 정보가 보이는 곳 -->
-        <div class="selected-info">
-          <h2 id="selected-title">장소 로딩 중...</h2>
-          <p id="selected-desc">설명을 불러오는 중입니다.</p>
-        </div>
-        
-        <!-- 장소 선택 버튼 목록 -->
-        <div class="places-list">
-          <button class="place-btn" onclick="selectPlace(0)">
-            <span class="btn-icon">🏛️</span>
-            <span class="btn-name">서울시청</span>
-          </button>
-          <button class="place-btn" onclick="selectPlace(1)">
-            <span class="btn-icon">🚇</span>
-            <span class="btn-name">강남역</span>
-          </button>
-          <button class="place-btn" onclick="selectPlace(2)">
-            <span class="btn-icon">🎨</span>
-            <span class="btn-name">홍대입구역</span>
-          </button>
-        </div>
-      </div>
+    <!-- 2. 사용자 조작 안내 가이드 배너 -->
+    <div class="guide-banner">
+      <span class="guide-icon">💡</span>
+      <span class="guide-text">아래 장소 버튼을 누르면 지도가 해당 위치로 부드럽게 이동합니다!</span>
+    </div>
+
+    <!-- 3. 화면 중앙에 배치되는 지도 -->
+    <div id="map"></div>
+
+    <!-- 4. 현재 선택된 장소 설명 카드 -->
+    <div class="info-card">
+      <h2 id="selected-title">장소 로딩 중...</h2>
+      <p id="selected-desc">설명을 불러오는 중입니다.</p>
+    </div>
+
+    <!-- 5. 큼직한 장소 선택 버튼 목록 (가로 정렬) -->
+    <div class="places-list">
+      <button class="place-btn" onclick="selectPlace(0)">
+        <span class="btn-icon">🏛️</span>
+        <span class="btn-name">서울시청</span>
+      </button>
+      <button class="place-btn" onclick="selectPlace(1)">
+        <span class="btn-icon">🚇</span>
+        <span class="btn-name">강남역</span>
+      </button>
+      <button class="place-btn" onclick="selectPlace(2)">
+        <span class="btn-icon">🎨</span>
+        <span class="btn-name">홍대입구역</span>
+      </button>
     </div>
   </div>
 
@@ -114,8 +115,8 @@
 
       // D. 정보창에 표시될 새로운 내용을 작성하고 마커 위에 열어줍니다.
       const iwContent = `
-        <div style="padding: 10px 15px; font-size: 14px; color: #333333; font-weight: bold; text-align: center; font-family: '맑은 고딕', sans-serif; white-space: nowrap;">
-          📍 오늘의 위치 안내 장소: ${selected.name}
+        <div style="padding: 8px 12px; font-size: 13px; color: #1e293b; font-weight: bold; text-align: center; font-family: '맑은 고딕', sans-serif; white-space: nowrap;">
+          📍 오늘의 장소: ${selected.name}
         </div>
       `;
       infowindow.setContent(iwContent);
