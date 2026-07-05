@@ -11,7 +11,37 @@
   <div class="container">
     <h1>📍 나만의 위치 안내 서비스</h1>
     <p class="description">내 주변의 장소를 쉽고 빠르게 찾아보세요.</p>
-    <div id="map"></div>
+    
+    <!-- 앱 레이아웃 컨테이너 (지도와 장소 정보 판넬을 감쌉니다) -->
+    <div class="app-layout">
+      <!-- 1. 카카오맵 지도 영역 -->
+      <div id="map"></div>
+      
+      <!-- 2. 장소 정보 및 버튼 컨트롤 영역 -->
+      <div class="places-panel">
+        <!-- 현재 선택된 장소의 정보가 보이는 곳 -->
+        <div class="selected-info">
+          <h2 id="selected-title">장소 로딩 중...</h2>
+          <p id="selected-desc">설명을 불러오는 중입니다.</p>
+        </div>
+        
+        <!-- 장소 선택 버튼 목록 -->
+        <div class="places-list">
+          <button class="place-btn" onclick="selectPlace(0)">
+            <span class="btn-icon">🏛️</span>
+            <span class="btn-name">서울시청</span>
+          </button>
+          <button class="place-btn" onclick="selectPlace(1)">
+            <span class="btn-icon">🚇</span>
+            <span class="btn-name">강남역</span>
+          </button>
+          <button class="place-btn" onclick="selectPlace(2)">
+            <span class="btn-icon">🎨</span>
+            <span class="btn-name">홍대입구역</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 
@@ -22,48 +52,93 @@
   <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=30c689a44af9d4aadb7b449a0a2eb2e9"></script>
   
   <script>
-    // 1. 지도를 표시할 HTML 태그(div)를 가져옵니다.
+    // 1. 장소 데이터 목록 정의 (이름, 상세 설명, 위도 lat, 경도 lng)
+    const places = [
+      {
+        name: "서울시청",
+        desc: "서울특별시의 행정 업무를 총괄하는 시청 건물이며, 넓은 잔디광장인 서울광장이 앞에 있습니다.",
+        lat: 37.566826,
+        lng: 126.9786567
+      },
+      {
+        name: "강남역",
+        desc: "대한민국 교통의 허브이자 트렌디한 패션, 맛집, 엔터테인먼트가 모여있는 활기찬 상권입니다.",
+        lat: 37.497942,
+        lng: 127.027621
+      },
+      {
+        name: "홍대입구역",
+        desc: "젊은이들의 거리로 버스킹 공연, 예술적 감각의 카페, 개성 있는 쇼핑숍들이 가득한 문화 예술의 중심지입니다.",
+        lat: 37.557527,
+        lng: 126.9244669
+      }
+    ];
+
+    // 2. 지도를 표시할 HTML 태그(div)를 가져옵니다.
     const container = document.getElementById('map');
     
-    // 2. 지도를 생성할 때 필요한 기본 옵션을 설정합니다.
+    // 3. 지도를 생성할 때 필요한 기본 옵션을 설정합니다 (초기화면: 서울시청).
     const options = {
-      center: new kakao.maps.LatLng(37.566826, 126.9786567), // 지도의 중심 좌표 (서울시청 위도, 경도)
+      center: new kakao.maps.LatLng(places[0].lat, places[0].lng),
       level: 3 // 지도의 확대 레벨 (숫자가 작을수록 확대됨)
     };
     
-    // 3. 지도를 실제로 생성합니다.
+    // 4. 지도를 실제로 생성합니다.
     const map = new kakao.maps.Map(container, options);
 
-    // 4. 지도 위에 표시할 마커의 위치를 지정합니다 (서울시청 좌표).
-    const markerPosition = new kakao.maps.LatLng(37.566826, 126.9786567);
-    
-    // 5. 마커 객체를 생성합니다.
+    // 5. 지도 위에 표시할 마커 객체를 생성합니다 (초기 위치로 서울시청 지정).
     const marker = new kakao.maps.Marker({
-      position: markerPosition
+      position: map.getCenter()
     });
-    
-    // 6. 생성한 마커를 지도 위에 올립니다.
     marker.setMap(map);
 
-    // 7. 마커를 클릭했을 때 나타날 정보창(InfoWindow)의 내용을 작성합니다.
-    // 글자 크기와 레이아웃을 다듬기 위한 HTML/CSS 스타일이 들어가 있습니다.
-    const iwContent = `
-      <div style="padding: 10px 15px; font-size: 14px; color: #333333; font-weight: bold; text-align: center; font-family: '맑은 고딕', sans-serif;">
-        📍 오늘의 위치 안내 장소
-      </div>
-    `;
-
-    // 8. 정보창 객체를 생성합니다.
+    // 6. 마커 클릭 시 보여줄 정보창 객체를 생성합니다.
     const infowindow = new kakao.maps.InfoWindow({
-      content: iwContent,
-      removable: true // 사용자가 닫기 버튼(X)을 눌러 닫을 수 있게 설정합니다.
+      removable: true // 사용자가 닫기 버튼(X)을 눌러 직접 닫을 수 있게 합니다.
     });
 
-    // 9. 마커에 클릭 이벤트를 등록합니다.
-    // 마커를 클릭하면 정보창이 지도(map)의 해당 마커(marker) 위에 열리게 됩니다.
+    // 7. 특정 장소를 선택했을 때 전체 상태를 업데이트하는 함수입니다.
+    function selectPlace(index) {
+      const selected = places[index];
+
+      // A. 화면의 장소명과 설명 텍스트를 변경합니다.
+      document.getElementById('selected-title').innerText = selected.name;
+      document.getElementById('selected-desc').innerText = selected.desc;
+
+      // B. 지도 중심을 클릭한 장소의 위도/경도 좌표로 부드럽게 이동시킵니다.
+      const newPos = new kakao.maps.LatLng(selected.lat, selected.lng);
+      map.panTo(newPos); 
+
+      // C. 마커의 위치도 새 장소로 함께 이동시킵니다.
+      marker.setPosition(newPos);
+
+      // D. 정보창에 표시될 새로운 내용을 작성하고 마커 위에 열어줍니다.
+      const iwContent = `
+        <div style="padding: 10px 15px; font-size: 14px; color: #333333; font-weight: bold; text-align: center; font-family: '맑은 고딕', sans-serif; white-space: nowrap;">
+          📍 오늘의 위치 안내 장소: ${selected.name}
+        </div>
+      `;
+      infowindow.setContent(iwContent);
+      infowindow.open(map, marker);
+
+      // E. 현재 클릭된 버튼을 시각적으로 강조하기 위해 클래스(active)를 업데이트합니다.
+      const buttons = document.querySelectorAll('.place-btn');
+      buttons.forEach((btn, idx) => {
+        if (idx === index) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    // 8. 마커에 클릭 이벤트를 달아 마커 클릭 시에도 언제든 정보창이 다시 뜨도록 합니다.
     kakao.maps.event.addListener(marker, 'click', function() {
       infowindow.open(map, marker);
     });
+
+    // 9. 페이지가 처음 로드되었을 때 첫 번째 장소(서울시청)가 기본으로 선택되도록 실행합니다.
+    selectPlace(0);
   </script>
 </body>
 </html>
