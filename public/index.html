@@ -11,10 +11,25 @@
   <div class="container">
     <h1>📍 나만의 위치 안내 서비스</h1>
     <p class="description">내 주변의 장소를 쉽고 빠르게 찾아보세요.</p>
-    <div class="map-placeholder">
-      <span class="icon">🗺️</span>
-      <p>지도는 배포 후 연결합니다</p>
-    </div>
+    <div id="map"></div>
   </div>
+
+  <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=30c689a44af9d4aadb7b449a0a2eb2e9"></script>
+  <script>
+    // 지도 초기화
+    const container = document.getElementById('map');
+    const options = {
+      center: new kakao.maps.LatLng(37.566826, 126.9786567), // 서울시청 기준
+      level: 3
+    };
+    const map = new kakao.maps.Map(container, options);
+
+    // 마커 추가
+    const markerPosition = new kakao.maps.LatLng(37.566826, 126.9786567);
+    const marker = new kakao.maps.Marker({
+      position: markerPosition
+    });
+    marker.setMap(map);
+  </script>
 </body>
 </html>
