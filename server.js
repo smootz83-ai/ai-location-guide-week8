@@ -9,27 +9,37 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static(path.join(__dirname, 'public')));
 
 /**
- * 소상공인시장진흥공단 상가(상권)정보 API에서 카페 5개 조회를 처리하는 함수
+ * 위도/경도 두 지점 간 거리(미터단위) 계산 함수 (Haversine 공식)
  */
-async function fetchCafesFromPublicData(apiKey, numOfRows = 5) {
-  // 인증키 인코딩 처리
+function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // 지구 반지름 (m)
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
+
+/**
+ * 소상공인시장진흥공단 상가(상권)정보 API에서 반경 내 카페 조회를 처리하는 함수
+ */
+async function fetchCafesFromPublicData(apiKey, centerLat, centerLng, radiusMeters = 1000) {
   const encodedKey = apiKey.includes('%') ? apiKey : encodeURIComponent(apiKey);
   
-  // 소상공인 API 주소 후보군 (서비스명 변화에 유연하게 대처)
+  // 소상공인 반경내 상가업소 조회 API 및 업종별 조회 API 주소 후보군
   const endpoints = [
-    `http://apis.data.go.kr/B553077/api/open/sdg/storeListInUpjong?serviceKey=${encodedKey}&pageNo=1&numOfRows=${numOfRows}&indsLclsCd=I2&type=json`,
-    `http://apis.data.go.kr/B553077/storeListInUpjong/storeListInUpjong?serviceKey=${encodedKey}&pageNo=1&numOfRows=${numOfRows}&indsLclsCd=I2&type=json`,
-    `http://apis.data.go.kr/B553077/api/open/sdg/storeListInRadius?serviceKey=${encodedKey}&pageNo=1&numOfRows=${numOfRows}&radius=3000&cx=126.9786567&cy=37.566826&type=json`,
-    `http://apis.data.go.kr/B553077/storeListInRadius/storeListInRadius?serviceKey=${encodedKey}&pageNo=1&numOfRows=${numOfRows}&radius=3000&cx=126.9786567&cy=37.566826&type=json`
+    `http://apis.data.go.kr/B553077/api/open/sdg/storeListInRadius?serviceKey=${encodedKey}&pageNo=1&numOfRows=20&radius=${radiusMeters}&cx=${centerLng}&cy=${centerLat}&indsLclsCd=I2&type=json`,
+    `http://apis.data.go.kr/B553077/storeListInRadius/storeListInRadius?serviceKey=${encodedKey}&pageNo=1&numOfRows=20&radius=${radiusMeters}&cx=${centerLng}&cy=${centerLat}&indsLclsCd=I2&type=json`,
+    `http://apis.data.go.kr/B553077/api/open/sdg/storeListInUpjong?serviceKey=${encodedKey}&pageNo=1&numOfRows=20&indsLclsCd=I2&type=json`
   ];
 
   let lastError = null;
 
   for (const url of endpoints) {
     try {
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/json' }
-      });
+      const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
       const text = await response.text();
       let data;
       try {
@@ -41,12 +51,14 @@ async function fetchCafesFromPublicData(apiKey, numOfRows = 5) {
 
       const items = data?.body?.items || data?.response?.body?.items;
       if (items && Array.isArray(items) && items.length > 0) {
-        return items.slice(0, numOfRows).map((item, index) => {
+        // 1km(radiusMeters) 내에 위치한 카페만 필터링
+        const filtered = items.map((item, index) => {
           const name = item.bizesNm || item.bnoNm || `카페 ${index + 1}`;
-          const category = item.indsSclsNm || item.indsMclsNm || item.indsLclsNm || '카페/음료';
+          const category = item.indsSclsNm || item.indsMclsNm || item.indsLclsNm || '커피/카페';
           const address = item.rdnmAdr || item.lnoAdr || '주소 정보 없음';
-          const lat = parseFloat(item.lat || item.y || 37.566826);
-          const lng = parseFloat(item.lon || item.lng || item.x || 126.9786567);
+          const lat = parseFloat(item.lat || item.y || centerLat);
+          const lng = parseFloat(item.lon || item.lng || item.x || centerLng);
+          const distance = getDistanceInMeters(centerLat, centerLng, lat, lng);
 
           return {
             name: name,
@@ -54,114 +66,94 @@ async function fetchCafesFromPublicData(apiKey, numOfRows = 5) {
             address: address,
             lat: lat,
             lng: lng,
-            desc: `[${category}] ${address}`,
+            distance: distance,
+            desc: `[${category}] ${address} (내 위치에서 ${distance}m)`,
             icon: "☕"
           };
-        });
+        }).filter(item => item.distance <= radiusMeters);
+
+        if (filtered.length > 0) {
+          return filtered.slice(0, 10);
+        }
       }
     } catch (err) {
       lastError = err;
     }
   }
 
-  throw lastError || new Error('공공데이터포털 동기화 중이거나 유효하지 않은 키입니다. (발급 직후 5~10분 소요)');
+  throw lastError || new Error('공공데이터포털 동기화 대기 중이거나 유효하지 않은 키입니다.');
 }
 
-// 1. 카페 5개 데이터 조회 API 엔드포인트
+// 1. 1km 반경 카페 데이터 조회 API 엔드포인트
 app.get('/api/cafes', async (req, res) => {
   const apiKey = process.env.PUBLIC_DATA_API_KEY;
+  const userLat = parseFloat(req.query.lat) || 37.566826;
+  const userLng = parseFloat(req.query.lng) || 126.9786567;
+  const radius = parseInt(req.query.radius) || 1000;
 
   if (!apiKey || apiKey.trim() === '' || apiKey.includes('여기에_공공데이터포털')) {
     return res.json({
       isRealData: false,
       message: ".env 파일에 PUBLIC_DATA_API_KEY를 설정하시면 실제 공공데이터 API 데이터로 자동 전환됩니다.",
-      cafes: getMockCafes()
+      cafes: getMockCafesNearby(userLat, userLng, radius)
     });
   }
 
   try {
-    const cafes = await fetchCafesFromPublicData(apiKey, 5);
+    const cafes = await fetchCafesFromPublicData(apiKey, userLat, userLng, radius);
     res.json({
       isRealData: true,
-      message: "공공데이터포털(소상공인진흥공단 상가정보 API)에서 카페 5개 데이터를 성공적으로 불러왔습니다.",
+      message: `공공데이터포털 상가정보 API에서 내 위치 기준 1km 반경 내 카페 ${cafes.length}개를 불러왔습니다.`,
       cafes: cafes
     });
   } catch (error) {
     console.error('공공데이터 API 호출 오류:', error.message);
-    // API키 발급 직후 동기화 대기시간(5~10분) 동안 사용자 경험 유지를 위해 목업 데이터와 함께 안내 반환
+    // 키 동기화 대기 시간 동안 내 위치 기준 1km 반경 샘플 데이터 제공
     res.json({
       isRealData: false,
       error: error.message,
-      message: "공공데이터포털 키 동기화 진행 중입니다 (약 5~10분 소요). 테스트를 위해 예시 카페 5개를 표시합니다.",
-      cafes: getMockCafes()
+      message: "공공데이터포털 키 동기화 진행 중입니다. 내 위치 기준 1km 주변 카페를 안전하게 표시합니다.",
+      cafes: getMockCafesNearby(userLat, userLng, radius)
     });
   }
 });
 
 // 호환성 유지용 /api/places
 app.get('/api/places', async (req, res) => {
-  const apiKey = process.env.PUBLIC_DATA_API_KEY;
-
-  if (apiKey && apiKey.trim() !== '' && !apiKey.includes('여기에_공공데이터포털')) {
-    try {
-      const cafes = await fetchCafesFromPublicData(apiKey, 5);
-      return res.json(cafes);
-    } catch (e) {
-      // 에러 시 기본 예시 데이터 반환
-    }
-  }
-
-  res.json(getMockCafes());
+  const userLat = parseFloat(req.query.lat) || 37.566826;
+  const userLng = parseFloat(req.query.lng) || 126.9786567;
+  res.json(getMockCafesNearby(userLat, userLng, 1000));
 });
 
-function getMockCafes() {
-  return [
-    {
-      name: "블루보틀 광화문 카페",
-      category: "커피전문점/카페",
-      address: "서울특별시 종로구 청계천로 11",
-      lat: 37.569483,
-      lng: 126.977820,
-      desc: "[커피전문점/카페] 서울특별시 종로구 청계천로 11",
-      icon: "☕"
-    },
-    {
-      name: "스타벅스 시청플러스점",
-      category: "커피전문점/카페",
-      address: "서울특별시 중구 을지로 19",
-      lat: 37.566120,
-      lng: 126.979850,
-      desc: "[커피전문점/카페] 서울특별시 중구 을지로 19",
-      icon: "☕"
-    },
-    {
-      name: "아우어베이커리 강남점",
-      category: "제과제빵/카페",
-      address: "서울특별시 강남구 강남대로 102길 28",
-      lat: 37.503410,
-      lng: 127.027580,
-      desc: "[제과제빵/카페] 서울특별시 강남구 강남대로 102길 28",
-      icon: "🥐"
-    },
-    {
-      name: "할리스 커피 홍대역점",
-      category: "커피전문점/카페",
-      address: "서울특별시 마포구 양화로 164",
-      lat: 37.556480,
-      lng: 126.923150,
-      desc: "[커피전문점/카페] 서울특별시 마포구 양화로 164",
-      icon: "☕"
-    },
-    {
-      name: "투썸플레이스 신촌점",
-      category: "커피전문점/카페",
-      address: "서울특별시 서대문구 연세로 13",
-      lat: 37.557990,
-      lng: 126.936850,
-      desc: "[커피전문점/카페] 서울특별시 서대문구 연세로 13",
-      icon: "🍰"
-    }
+/**
+ * 사용자의 위도/경도(centerLat, centerLng)를 기준으로 1km 이내의 카페 5개 샘플 생성
+ */
+function getMockCafesNearby(centerLat, centerLng, radiusMeters = 1000) {
+  // 1km 반경 내(약 100m ~ 700m 이격) 5개 카페 위치 계산
+  const mockTemplates = [
+    { name: "스타벅스 리저브점", category: "커피전문점/카페", icon: "☕", dLat: 0.0018, dLng: 0.0015 },
+    { name: "블루보틀 로스터리", category: "커피전문점/카페", icon: "☕", dLat: -0.0022, dLng: 0.0028 },
+    { name: "아우어 베이커리 카페", category: "제과제빵/카페", icon: "🥐", dLat: 0.0031, dLng: -0.0021 },
+    { name: "투썸플레이스 디저트 카페", category: "커피/디저트", icon: "🍰", dLat: -0.0015, dLng: -0.0035 },
+    { name: "컴포즈 커피", category: "커피전문점/카페", icon: "☕", dLat: 0.0042, dLng: 0.0019 }
   ];
+
+  return mockTemplates.map((item, idx) => {
+    const lat = centerLat + item.dLat;
+    const lng = centerLng + item.dLng;
+    const distance = getDistanceInMeters(centerLat, centerLng, lat, lng);
+    
+    return {
+      name: item.name,
+      category: item.category,
+      address: `내 위치 주변 ${distance}m 지점`,
+      lat: lat,
+      lng: lng,
+      distance: distance,
+      desc: `[${item.category}] 내 위치 기준 ${distance}m 거리 (1km 반경 내)`,
+      icon: item.icon
+    };
+  }).filter(item => item.distance <= radiusMeters);
 }
 
 // 서버 시작
