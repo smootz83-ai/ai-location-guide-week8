@@ -47,14 +47,15 @@
     let marker = null;
     let infowindow = null;
 
-    // 서버 API에서 장소(또는 공공데이터 카페) 데이터 불러오기
+    // 서버 API에서 카페 5개 데이터 불러오기
     async function fetchPlaces() {
       try {
-        const response = await fetch('/api/places');
-        places = await response.json();
+        const response = await fetch('/api/cafes');
+        const data = await response.json();
+        places = data.cafes || data;
         renderButtons();
       } catch (err) {
-        console.error('장소 데이터 불러오기 실패:', err);
+        console.error('카페 데이터 불러오기 실패:', err);
       }
     }
 
