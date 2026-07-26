@@ -46,11 +46,10 @@
   </div>
 
   <!-- 
-    카카오맵 JavaScript SDK 불러오기
-    appkey= 뒤에 발급받으신 카카오맵 JavaScript 키를 입력하는 부분입니다.
-    현재는 이미 전달해주신 키(30c689a44af9d4aadb7b449a0a2eb2e9)가 적용되어 있습니다.
+    카카오맵 JavaScript SDK 불러오기 (autoload=false 적용)
+    SDK 스크립트가 완전히 로드된 후 kakao.maps.load() 함수를 통해 지도를 초기화합니다.
   -->
-  <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=30c689a44af9d4aadb7b449a0a2eb2e9"></script>
+  <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=30c689a44af9d4aadb7b449a0a2eb2e9&autoload=false"></script>
   
   <script>
     // 1. 장소 데이터 목록 정의 (이름, 상세 설명, 위도 lat, 경도 lng)
@@ -75,30 +74,46 @@
       }
     ];
 
-    // 2. 지도를 표시할 HTML 태그(div)를 가져옵니다.
-    const container = document.getElementById('map');
-    
-    // 3. 지도를 생성할 때 필요한 기본 옵션을 설정합니다 (초기화면: 서울시청).
-    const options = {
-      center: new kakao.maps.LatLng(places[0].lat, places[0].lng),
-      level: 3 // 지도의 확대 레벨 (숫자가 작을수록 확대됨)
-    };
-    
-    // 4. 지도를 실제로 생성합니다.
-    const map = new kakao.maps.Map(container, options);
+    // 지도, 마커, 정보창 객체를 담을 전역 변수 선언
+    let map = null;
+    let marker = null;
+    let infowindow = null;
 
-    // 5. 지도 위에 표시할 마커 객체를 생성합니다 (초기 위치로 서울시청 지정).
-    const marker = new kakao.maps.Marker({
-      position: map.getCenter()
+    // 2. 카카오맵 SDK 로드 완료 후 지도, 마커, 정보창 초기화
+    kakao.maps.load(function() {
+      // A. 지도를 표시할 HTML 태그(div)를 가져옵니다.
+      const container = document.getElementById('map');
+      
+      // B. 지도를 생성할 때 필요한 기본 옵션을 설정합니다 (초기화면: 서울시청).
+      const options = {
+        center: new kakao.maps.LatLng(places[0].lat, places[0].lng),
+        level: 3 // 지도의 확대 레벨 (숫자가 작을수록 확대됨)
+      };
+      
+      // C. 지도를 실제로 생성합니다.
+      map = new kakao.maps.Map(container, options);
+
+      // D. 지도 위에 표시할 마커 객체를 생성합니다 (초기 위치로 서울시청 지정).
+      marker = new kakao.maps.Marker({
+        position: map.getCenter()
+      });
+      marker.setMap(map);
+
+      // E. 마커 클릭 시 보여줄 정보창 객체를 생성합니다.
+      infowindow = new kakao.maps.InfoWindow({
+        removable: true // 사용자가 닫기 버튼(X)을 눌러 직접 닫을 수 있게 합니다.
+      });
+
+      // F. 마커에 클릭 이벤트를 달아 마커 클릭 시에도 언제든 정보창이 다시 뜨도록 합니다.
+      kakao.maps.event.addListener(marker, 'click', function() {
+        infowindow.open(map, marker);
+      });
+
+      // G. 지도 로드가 완전히 완료되었을 때 첫 번째 장소(서울시청)를 기본 선택 상태로 지정합니다.
+      selectPlace(0);
     });
-    marker.setMap(map);
 
-    // 6. 마커 클릭 시 보여줄 정보창 객체를 생성합니다.
-    const infowindow = new kakao.maps.InfoWindow({
-      removable: true // 사용자가 닫기 버튼(X)을 눌러 직접 닫을 수 있게 합니다.
-    });
-
-    // 7. 특정 장소를 선택했을 때 전체 상태를 업데이트하는 함수입니다.
+    // 3. 특정 장소를 선택했을 때 전체 상태를 업데이트하는 함수입니다.
     function selectPlace(index) {
       const selected = places[index];
 
@@ -106,14 +121,17 @@
       document.getElementById('selected-title').innerText = selected.name;
       document.getElementById('selected-desc').innerText = selected.desc;
 
-      // B. 지도 중심을 클릭한 장소의 위도/경도 좌표로 부드럽게 이동시킵니다.
+      // B. 카카오맵이 아직 초기화되지 않았다면 텍스트 업데이트만 진행하고 종료합니다.
+      if (!map || !marker || !infowindow) return;
+
+      // C. 지도 중심을 클릭한 장소의 위도/경도 좌표로 부드럽게 이동시킵니다.
       const newPos = new kakao.maps.LatLng(selected.lat, selected.lng);
       map.panTo(newPos); 
 
-      // C. 마커의 위치도 새 장소로 함께 이동시킵니다.
+      // D. 마커의 위치도 새 장소로 함께 이동시킵니다.
       marker.setPosition(newPos);
 
-      // D. 정보창에 표시될 새로운 내용을 작성하고 마커 위에 열어줍니다.
+      // E. 정보창에 표시될 새로운 내용을 작성하고 마커 위에 열어줍니다.
       const iwContent = `
         <div style="padding: 8px 12px; font-size: 13px; color: #1e293b; font-weight: bold; text-align: center; font-family: '맑은 고딕', sans-serif; white-space: nowrap;">
           📍 오늘의 장소: ${selected.name}
@@ -122,7 +140,7 @@
       infowindow.setContent(iwContent);
       infowindow.open(map, marker);
 
-      // E. 현재 클릭된 버튼을 시각적으로 강조하기 위해 클래스(active)를 업데이트합니다.
+      // F. 현재 클릭된 버튼을 시각적으로 강조하기 위해 클래스(active)를 업데이트합니다.
       const buttons = document.querySelectorAll('.place-btn');
       buttons.forEach((btn, idx) => {
         if (idx === index) {
@@ -132,14 +150,6 @@
         }
       });
     }
-
-    // 8. 마커에 클릭 이벤트를 달아 마커 클릭 시에도 언제든 정보창이 다시 뜨도록 합니다.
-    kakao.maps.event.addListener(marker, 'click', function() {
-      infowindow.open(map, marker);
-    });
-
-    // 9. 페이지가 처음 로드되었을 때 첫 번째 장소(서울시청)가 기본으로 선택되도록 실행합니다.
-    selectPlace(0);
   </script>
 </body>
 </html>
