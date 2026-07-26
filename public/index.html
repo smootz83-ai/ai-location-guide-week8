@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="나만의 위치 안내 서비스 - 내 주변 1km 반경 카페 안내">
+  <meta name="description" content="나만의 위치 안내 서비스 - 반경별 & 전국 카페 검색">
   <title>나만의 위치 안내 서비스</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -11,26 +11,40 @@
   <div class="container">
     <!-- 1. 메인 타이틀 및 설명 -->
     <h1>📍 나만의 위치 안내 서비스</h1>
-    <p class="description">내 주변 1km 반경 안의 카페를 찾아보세요.</p>
+    <p class="description">내 주변 반경별 및 전국의 카페를 자유롭게 찾아보세요.</p>
     
-    <!-- 2. 사용자 조작 및 위치 권한 안내 가이드 배너 -->
+    <!-- 2. 반경 선택 큼직한 칩 UI 라벨 버튼 목록 (요구사항 1, 3, 7) -->
+    <div class="radius-chip-container">
+      <button class="radius-chip active" onclick="selectRadius(1000, this)">1km</button>
+      <button class="radius-chip" onclick="selectRadius(3000, this)">3km</button>
+      <button class="radius-chip" onclick="selectRadius(5000, this)">5km</button>
+      <button class="radius-chip" onclick="selectRadius(0, this)">전국</button>
+    </div>
+
+    <!-- 3. 검색어 입력 박스 (요구사항 5) -->
+    <div class="search-box-container">
+      <input type="text" id="search-input" class="search-input" placeholder="카페 이름 또는 지역 검색 (예: 강남, 스타벅스, 제주)..." onkeyup="if(event.key==='Enter') performSearch();">
+      <button class="search-btn" onclick="performSearch()">🔍 검색</button>
+    </div>
+
+    <!-- 4. 사용자 조작 및 위치 권한 안내 가이드 배너 -->
     <div class="guide-banner" id="guide-banner">
       <span class="guide-icon" id="guide-icon">📍</span>
       <span class="guide-text" id="guide-text">내 위치를 확인하는 중입니다... (브라우저 위치 권한을 허용해 주세요)</span>
     </div>
 
-    <!-- 3. 화면 중앙에 배치되는 지도 -->
+    <!-- 5. 화면 중앙에 배치되는 지도 -->
     <div id="map"></div>
 
-    <!-- 4. 현재 선택된 카페 설명 카드 -->
+    <!-- 6. 현재 선택된 카페 설명 카드 -->
     <div class="info-card">
       <h2 id="selected-title">카페 로딩 중...</h2>
-      <p id="selected-desc">1km 반경 내 카페 정보를 불러오는 중입니다.</p>
+      <p id="selected-desc">카페 정보를 불러오는 중입니다.</p>
     </div>
 
-    <!-- 5. 큼직한 카페 선택 버튼 목록 (가로/세로 반응형 정렬) -->
+    <!-- 7. 큼직한 카페 선택 버튼 목록 (가로/세로 반응형 정렬) -->
     <div class="places-list" id="places-list">
-      <!-- 백엔드 /api/cafes 데이터로 1km 이내 카페 버튼이 동적 생성됩니다 -->
+      <!-- 백엔드 /api/cafes 데이터로 카페 버튼이 동적 생성됩니다 -->
     </div>
   </div>
 
@@ -41,10 +55,9 @@
   <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=30c689a44af9d4aadb7b449a0a2eb2e9&autoload=false"></script>
   
   <script>
-    // 기본 상수 및 위치 정보 (기본 위치: 서울시청)
+    // 기본 상수 및 기본 위치 (서울시청)
     const DEFAULT_LAT = 37.566826;
     const DEFAULT_LNG = 126.9786567;
-    const SEARCH_RADIUS = 1000; // 1km = 1000 미터
 
     // 전역 상태 변수
     let map = null;
@@ -55,6 +68,8 @@
     let places = [];
     let currentLat = DEFAULT_LAT;
     let currentLng = DEFAULT_LNG;
+    let currentRadius = 1000; // 기본 선택: 1km (1000m)
+    let isLocationAllowed = false;
 
     // 두 지점 간 거리(미터) 계산 함수 (Haversine)
     function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -70,17 +85,16 @@
 
     // 카카오맵 SDK 로드 완료 후 실행
     kakao.maps.load(function() {
-      // 1. 지도 초기화 (초기 위치: 기본 위치)
       const container = document.getElementById('map');
       const options = {
         center: new kakao.maps.LatLng(DEFAULT_LAT, DEFAULT_LNG),
-        level: 4 // 1km 원이 화면에 잘 보이도록 확대 레벨 설정
+        level: 4
       };
       
       map = new kakao.maps.Map(container, options);
       infowindow = new kakao.maps.InfoWindow({ removable: true });
 
-      // 2. 브라우저 위치 권한 요청 (Geolocation)
+      // 브라우저 위치 권한 요청
       requestUserLocation();
     });
 
@@ -88,120 +102,168 @@
     function requestUserLocation() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-          // 위치 허용 성공 시
           function(position) {
             currentLat = position.coords.latitude;
             currentLng = position.coords.longitude;
+            isLocationAllowed = true;
             updateLocationState(currentLat, currentLng, true);
           },
-          // 위치 거부 또는 오류 발생 시
           function(error) {
             console.warn('위치 권한 거부 또는 실패:', error.message);
             currentLat = DEFAULT_LAT;
             currentLng = DEFAULT_LNG;
+            isLocationAllowed = false;
             updateLocationState(DEFAULT_LAT, DEFAULT_LNG, false);
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       } else {
-        // 지오로케이션 미지원 브라우저
         currentLat = DEFAULT_LAT;
         currentLng = DEFAULT_LNG;
+        isLocationAllowed = false;
         updateLocationState(DEFAULT_LAT, DEFAULT_LNG, false);
       }
     }
 
-    // 위치 상태 업데이트 및 1km 원/내 위치 마커/카페 데이터 로드
+    // 위치 상태 업데이트 및 내 위치 마커 설정
     async function updateLocationState(lat, lng, isAllowed) {
       const myPos = new kakao.maps.LatLng(lat, lng);
-
-      // A. 지도 중심을 내 위치(또는 기본 위치)로 이동
       map.setCenter(myPos);
 
-      // B. 배너 안내 문구 업데이트
-      const bannerIcon = document.getElementById('guide-icon');
-      const bannerText = document.getElementById('guide-text');
-      const banner = document.getElementById('guide-banner');
-
-      if (isAllowed) {
-        bannerIcon.innerText = '🎯';
-        bannerText.innerText = '내 위치가 성공적으로 확인되었습니다! (내 위치 기준 1km 반경 내 카페 안내)';
-        banner.style.backgroundColor = '#eff6ff';
-        banner.style.borderColor = '#bfdbfe';
-        banner.style.color = '#1e40af';
-      } else {
-        bannerIcon.innerText = '⚠️';
-        bannerText.innerText = '위치 권한이 거부/비활성화되어 기본 위치(서울시청) 기준으로 1km 반경 내 카페를 안내합니다.';
-        banner.style.backgroundColor = '#fffbeb';
-        banner.style.borderColor = '#fde68a';
-        banner.style.color = '#92400e';
-      }
-
-      // C. 기존 내 위치 마커 및 1km 원 지우기
+      // 내 위치 마커 갱신
       if (myLocationMarker) myLocationMarker.setMap(null);
-      if (circleOverlay) circleOverlay.setMap(null);
-
-      // D. 내 위치 마커 추가
       myLocationMarker = new kakao.maps.Marker({
         position: myPos,
         map: map
       });
 
-      // 내 위치 마커 상단 정보 표시
       const locationLabel = isAllowed ? '🎯 내 위치' : '🏛️ 기본 위치 (서울시청)';
       const myIw = new kakao.maps.InfoWindow({
         content: `<div style="padding: 6px 10px; font-size: 12px; font-weight: bold; color: #2563eb; text-align: center; font-family: sans-serif; white-space: nowrap;">${locationLabel}</div>`
       });
       myIw.open(map, myLocationMarker);
 
-      // E. 지도 위에 1km 반경 원(Circle) 표시 (요구사항 4 & 5)
-      circleOverlay = new kakao.maps.Circle({
-        center: myPos,
-        radius: SEARCH_RADIUS, // 1000m (1km)
-        strokeWeight: 2,
-        strokeColor: '#2563eb',
-        strokeOpacity: 0.8,
-        strokeStyle: 'dashed',
-        fillColor: '#3b82f6',
-        fillOpacity: 0.15
-      });
-      circleOverlay.setMap(map);
-
-      // F. 백엔드에서 내 위치 기준 1km 이내 카페 불러오기
-      await fetchNearbyCafes(lat, lng);
+      // 현재 반경 모드(기본 1km)에 맞춰 카페 데이터 및 원 업데이트
+      await updateRadiusAndCircle(currentRadius);
     }
 
-    // 백엔드 API에서 1km 반경 카페 불러오기
-    async function fetchNearbyCafes(lat, lng) {
+    // 1. 반경 라벨 칩 클릭 이벤트 핸들러 (요구사항 1, 2, 3, 4)
+    async function selectRadius(radiusMeters, chipElement) {
+      currentRadius = radiusMeters;
+
+      // 칩 버튼 활성화 색상 스타일 변경 (요구사항 3)
+      const chips = document.querySelectorAll('.radius-chip');
+      chips.forEach(chip => chip.classList.remove('active'));
+      if (chipElement) chipElement.classList.add('active');
+
+      await updateRadiusAndCircle(radiusMeters);
+    }
+
+    // 반경 원 변경 및 줌 레벨 조정
+    async function updateRadiusAndCircle(radiusMeters) {
+      const bannerIcon = document.getElementById('guide-icon');
+      const bannerText = document.getElementById('guide-text');
+      const banner = document.getElementById('guide-banner');
+      const myPos = new kakao.maps.LatLng(currentLat, currentLng);
+
+      // 2. 전국 모드일 때 (요구사항 4)
+      if (radiusMeters === 0) {
+        if (circleOverlay) circleOverlay.setMap(null); // 반경 원 숨기기
+        bannerIcon.innerText = '🌐';
+        bannerText.innerText = '전국 카페 검색 모드입니다 (검색어를 입력하시면 해당 전국 카페를 찾아드립니다).';
+        banner.style.backgroundColor = '#f3e8ff';
+        banner.style.borderColor = '#d8b4fe';
+        banner.style.color = '#6b21a8';
+        
+        map.setLevel(10); // 전국이 잘 보이도록 줌 레벨 확대
+      } else {
+        // 3. 1km, 3km, 5km 모드일 때 (요구사항 2)
+        const radiusText = radiusMeters >= 1000 ? `${radiusMeters/1000}km` : `${radiusMeters}m`;
+        
+        if (isLocationAllowed) {
+          bannerIcon.innerText = '🎯';
+          bannerText.innerText = `내 위치 기준 ${radiusText} 반경 내 카페를 안내합니다.`;
+          banner.style.backgroundColor = '#eff6ff';
+          banner.style.borderColor = '#bfdbfe';
+          banner.style.color = '#1e40af';
+        } else {
+          bannerIcon.innerText = '⚠️';
+          bannerText.innerText = `위치 권한 거부로 기본 위치(서울시청) 기준 ${radiusText} 반경 내 카페를 안내합니다.`;
+          banner.style.backgroundColor = '#fffbeb';
+          banner.style.borderColor = '#fde68a';
+          banner.style.color = '#92400e';
+        }
+
+        // 반경 원 크기 갱신
+        if (circleOverlay) circleOverlay.setMap(null);
+        circleOverlay = new kakao.maps.Circle({
+          center: myPos,
+          radius: radiusMeters,
+          strokeWeight: 2,
+          strokeColor: '#2563eb',
+          strokeOpacity: 0.8,
+          strokeStyle: 'dashed',
+          fillColor: '#3b82f6',
+          fillOpacity: 0.15
+        });
+        circleOverlay.setMap(map);
+        map.setCenter(myPos);
+
+        // 줌 레벨 자동 맞춤
+        if (radiusMeters === 1000) map.setLevel(4);
+        else if (radiusMeters === 3000) map.setLevel(6);
+        else if (radiusMeters === 5000) map.setLevel(7);
+      }
+
+      // 검색어 가져오기
+      const searchQuery = document.getElementById('search-input').value.trim();
+      await fetchNearbyCafes(currentLat, currentLng, radiusMeters, searchQuery);
+    }
+
+    // 검색 버튼 클릭 또는 엔터 키 검색 실행 함수 (요구사항 5)
+    async function performSearch() {
+      const searchQuery = document.getElementById('search-input').value.trim();
+      await fetchNearbyCafes(currentLat, currentLng, currentRadius, searchQuery);
+    }
+
+    // 백엔드 API에서 조건별 카페 데이터 불러오기
+    async function fetchNearbyCafes(lat, lng, radius, query) {
       try {
-        const response = await fetch(`/api/cafes?lat=${lat}&lng=${lng}&radius=${SEARCH_RADIUS}`);
+        const response = await fetch(`/api/cafes?lat=${lat}&lng=${lng}&radius=${radius}&query=${encodeURIComponent(query)}`);
         const data = await response.json();
         const rawCafes = data.cafes || data;
 
-        // 1km 반경 안의 카페만 필터링 (요구사항 6)
-        places = rawCafes.filter(cafe => {
-          const dist = getDistanceInMeters(lat, lng, cafe.lat, cafe.lng);
-          cafe.distance = dist;
-          return dist <= SEARCH_RADIUS;
-        });
+        // 전국 모드가 아닐 경우 반경 필터링 한 번 더 검증
+        if (radius > 0) {
+          places = rawCafes.filter(cafe => {
+            const dist = getDistanceInMeters(lat, lng, cafe.lat, cafe.lng);
+            cafe.distance = dist;
+            return dist <= radius;
+          });
+        } else {
+          // 전국 모드 (요구사항 5: 결과 일부만 제한적으로 보여줌)
+          places = rawCafes.slice(0, 10);
+        }
 
-        // 1km 안 카페들 마커 및 버튼 표시
+        // 마커 및 하단 결과 목록 동시 갱신 (요구사항 6)
         renderCafeMarkersAndButtons();
 
         if (places.length > 0) {
           selectPlace(0);
         } else {
-          document.getElementById('selected-title').innerText = "1km 반경 내 카페 없음";
-          document.getElementById('selected-desc').innerText = "1km 반경 안에 등록된 카페가 없습니다.";
+          document.getElementById('selected-title').innerText = "검색 결과 없음";
+          document.getElementById('selected-desc').innerText = query 
+            ? `'${query}' 검색어에 해당하는 카페를 찾을 수 없습니다.` 
+            : "선택하신 반경 범위 내에 등록된 카페가 없습니다.";
         }
       } catch (err) {
         console.error('카페 데이터 로드 오류:', err);
       }
     }
 
-    // 지도 상 카페 마커들 및 선택 버튼 생성
+    // 지도 마커 및 결과 목록 갱신 (요구사항 6)
     function renderCafeMarkersAndButtons() {
-      // 기존 카페 마커 삭제
+      // 기존 마커 지우기
       cafeMarkers.forEach(m => m.setMap(null));
       cafeMarkers = [];
 
@@ -211,20 +273,19 @@
       places.forEach((place, index) => {
         const cafePos = new kakao.maps.LatLng(place.lat, place.lng);
 
-        // 카페 마커 생성
+        // 지도 마커 추가
         const cMarker = new kakao.maps.Marker({
           position: cafePos,
           map: map
         });
 
-        // 마커 클릭 시 해당 카페 선택
         kakao.maps.event.addListener(cMarker, 'click', function() {
           selectPlace(index);
         });
 
         cafeMarkers.push(cMarker);
 
-        // 카페 선택 버튼 생성
+        // 하단 결과 버튼 추가
         const btn = document.createElement('button');
         btn.className = 'place-btn';
         btn.onclick = () => selectPlace(index);
@@ -243,13 +304,15 @@
       });
     }
 
-    // 특정 카페 선택 시 지도 이동 및 설명 업데이트
+    // 특정 카페 선택 시 지도 이동 및 설명 업데이트 (요구사항 6)
     function selectPlace(index) {
       if (!places[index]) return;
       const selected = places[index];
 
       document.getElementById('selected-title').innerText = selected.name;
-      document.getElementById('selected-desc').innerText = selected.desc || `[${selected.category}] ${selected.address} (내 위치에서 ${selected.distance}m)`;
+      
+      const distInfo = selected.distance ? `(거리: 약 ${selected.distance >= 1000 ? (selected.distance/1000).toFixed(1)+'km' : selected.distance+'m'})` : '';
+      document.getElementById('selected-desc').innerText = selected.desc || `[${selected.category}] ${selected.address} ${distInfo}`;
 
       if (!map || !infowindow) return;
 
@@ -259,7 +322,7 @@
       const iwContent = `
         <div style="padding: 8px 12px; font-size: 13px; color: #1e293b; font-weight: bold; text-align: center; font-family: sans-serif; white-space: nowrap;">
           ☕ ${selected.name}<br>
-          <span style="font-size: 11px; color: #64748b; font-weight: normal;">거리: 약 ${selected.distance}m</span>
+          <span style="font-size: 11px; color: #64748b; font-weight: normal;">${selected.address}</span>
         </div>
       `;
       infowindow.setContent(iwContent);
