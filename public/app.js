@@ -1,7 +1,9 @@
 const DEFAULT_POSITION = { lat: 37.566826, lng: 126.978657 };
 const state = {
   map: null,
-  location: { ...DEFAULT_POSITION },
+  location: null,
+  locationReady: false,
+  placesService: null,
   radius: 1000,
   markers: [],
   myMarker: null,
@@ -129,23 +131,82 @@ function renderResults() {
   }
 }
 
+function findNearbyCafes(query) {
+  return new Promise((resolve, reject) => {
+    const collected = [];
+    const location = new kakao.maps.LatLng(state.location.lat, state.location.lng);
+    const options = {
+      location,
+      radius: state.radius,
+      sort: kakao.maps.services.SortBy.DISTANCE,
+      size: 15
+    };
+
+    const callback = (data, status, pagination) => {
+      if (status === kakao.maps.services.Status.ZERO_RESULT) {
+        resolve([]);
+        return;
+      }
+      if (status !== kakao.maps.services.Status.OK) {
+        reject(new Error("카카오 장소 검색에 실패했습니다."));
+        return;
+      }
+
+      data.forEach((place) => {
+        if (collected.length >= 20) return;
+        collected.push({
+          name: place.place_name,
+          category: place.category_name.split(" > ").pop() || "카페",
+          address: place.road_address_name || place.address_name || "주소 정보 없음",
+          lat: Number(place.y),
+          lng: Number(place.x),
+          distance: Number(place.distance)
+        });
+      });
+
+      if (collected.length < 20 && pagination.hasNextPage) {
+        pagination.nextPage();
+      } else {
+        resolve(collected.slice(0, 20));
+      }
+    };
+
+    if (query) {
+      state.placesService.keywordSearch(query, callback, {
+        ...options,
+        category_group_code: "CE7"
+      });
+    } else {
+      state.placesService.categorySearch("CE7", callback, options);
+    }
+  });
+}
+
 async function searchCafes() {
   const query = $("#search-input").value.trim();
   const button = $("#search-button");
+  if (!state.locationReady || !state.location) {
+    setStatus("현재 위치를 확인한 뒤 검색할 수 있습니다. 브라우저의 위치 권한을 허용해 주세요.", "error");
+    return;
+  }
   button.disabled = true;
   setStatus("카페 데이터를 불러오는 중입니다.", "loading");
 
   try {
-    const params = new URLSearchParams({
-      lat: state.location.lat,
-      lng: state.location.lng,
-      radius: state.radius,
-      query
-    });
-    const response = await fetch(`/api/cafes?${params}`);
-    if (!response.ok) throw new Error("검색 정보를 가져오지 못했습니다.");
-    const data = await response.json();
-    state.places = Array.isArray(data.cafes) ? data.cafes : [];
+    if (state.radius === 0) {
+      const params = new URLSearchParams({
+        lat: state.location.lat,
+        lng: state.location.lng,
+        radius: 0,
+        query
+      });
+      const response = await fetch(`/api/cafes?${params}`);
+      if (!response.ok) throw new Error("검색 정보를 가져오지 못했습니다.");
+      const data = await response.json();
+      state.places = Array.isArray(data.cafes) ? data.cafes.slice(0, 20) : [];
+    } else {
+      state.places = await findNearbyCafes(query);
+    }
     renderResults();
     setStatus(
       state.places.length
@@ -163,15 +224,23 @@ async function searchCafes() {
 }
 
 function setLocation(location, allowed) {
+  if (!allowed) {
+    state.location = null;
+    state.locationReady = false;
+    state.places = [];
+    renderResults();
+    setStatus("현재 위치를 확인할 수 없습니다. 브라우저 설정에서 위치 권한을 허용한 뒤 새로고침해 주세요.", "error");
+    return;
+  }
+
   state.location = location;
+  state.locationReady = true;
   const position = new kakao.maps.LatLng(location.lat, location.lng);
   state.map.setCenter(position);
   state.myMarker?.setMap(null);
   state.myMarker = new kakao.maps.Marker({ map: state.map, position, zIndex: 30 });
   drawSearchArea();
-  if (!allowed) {
-    setStatus("현재 위치를 확인할 수 없어 서울시청을 기준으로 검색합니다.", "error");
-  }
+  setStatus(`현재 위치를 확인했습니다. 정확도 약 ${Math.round(location.accuracy)}m`, "success");
   searchCafes();
 }
 
@@ -181,12 +250,17 @@ function initMap() {
     level: 5
   });
   state.infoWindow = new kakao.maps.InfoWindow({ removable: true });
+  state.placesService = new kakao.maps.services.Places();
 
-  if (!navigator.geolocation) return setLocation({ ...DEFAULT_POSITION }, false);
+  if (!navigator.geolocation) return setLocation(null, false);
   navigator.geolocation.getCurrentPosition(
-    ({ coords }) => setLocation({ lat: coords.latitude, lng: coords.longitude }, true),
-    () => setLocation({ ...DEFAULT_POSITION }, false),
-    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    ({ coords }) => setLocation({
+      lat: coords.latitude,
+      lng: coords.longitude,
+      accuracy: coords.accuracy
+    }, true),
+    () => setLocation(null, false),
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
   );
 }
 
@@ -201,7 +275,7 @@ document.querySelectorAll(".radius-chip").forEach((chip) => {
     chip.classList.add("active");
     state.radius = Number(chip.dataset.radius);
     drawSearchArea();
-    if (state.radius > 0) {
+    if (state.radius > 0 && state.location) {
       state.map.setCenter(new kakao.maps.LatLng(state.location.lat, state.location.lng));
       state.map.setLevel(state.radius === 1000 ? 5 : state.radius === 3000 ? 7 : 8);
     }

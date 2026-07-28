@@ -12,7 +12,7 @@
     <header class="hero">
       <span class="eyebrow">CAFE MAP</span>
       <h1>내 주변 카페 찾기</h1>
-      <p>검색어와 거리를 선택하면 가까운 카페를 지도에서 보여드려요.</p>
+      <p>내 실제 위치를 기준으로 가까운 카페 20곳을 지도에서 보여드려요.</p>
     </header>
 
     <section class="search-panel" aria-label="카페 검색 조건">
@@ -57,14 +57,14 @@
       <section class="results-panel" aria-labelledby="results-title">
         <div class="panel-heading">
           <h2 id="results-title">카페 목록</h2>
-          <span>가까운 순으로 표시해요.</span>
+          <span>현재 위치에서 가까운 순으로 최대 20곳을 표시해요.</span>
         </div>
         <div id="places-list" class="places-list"></div>
       </section>
     </section>
   </main>
 
-  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=30c689a44af9d4aadb7b449a0a2eb2e9&autoload=false"></script>
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=30c689a44af9d4aadb7b449a0a2eb2e9&autoload=false&libraries=services"></script>
   <script src="/app.js"></script>
 </body>
 </html>
