@@ -223,7 +223,7 @@ async function searchCafes() {
   }
 }
 
-function setLocation(location, allowed) {
+function setLocation(location, allowed, source = "gps") {
   if (!allowed) {
     state.location = null;
     state.locationReady = false;
@@ -240,7 +240,12 @@ function setLocation(location, allowed) {
   state.myMarker?.setMap(null);
   state.myMarker = new kakao.maps.Marker({ map: state.map, position, zIndex: 30 });
   drawSearchArea();
-  setStatus(`현재 위치를 확인했습니다. 정확도 약 ${Math.round(location.accuracy)}m`, "success");
+  setStatus(
+    source === "map"
+      ? "지도에서 선택한 위치를 기준으로 가까운 카페를 찾습니다."
+      : `현재 위치를 확인했습니다. 정확도 약 ${Math.round(location.accuracy)}m`,
+    "success"
+  );
   searchCafes();
 }
 
@@ -251,6 +256,13 @@ function initMap() {
   });
   state.infoWindow = new kakao.maps.InfoWindow({ removable: true });
   state.placesService = new kakao.maps.services.Places();
+  kakao.maps.event.addListener(state.map, "dblclick", (mouseEvent) => {
+    setLocation({
+      lat: mouseEvent.latLng.getLat(),
+      lng: mouseEvent.latLng.getLng(),
+      accuracy: 0
+    }, true, "map");
+  });
 
   if (!navigator.geolocation) return setLocation(null, false);
   navigator.geolocation.getCurrentPosition(
