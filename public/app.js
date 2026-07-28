@@ -264,6 +264,23 @@ function initMap() {
   );
 }
 
+function startAppWhenServicesReady() {
+  let attempts = 0;
+  const waitForServices = () => {
+    if (kakao.maps.services?.Places) {
+      initMap();
+      return;
+    }
+    attempts += 1;
+    if (attempts <= 100) {
+      window.setTimeout(waitForServices, 50);
+      return;
+    }
+    setStatus("카페 검색 기능을 불러오지 못했습니다. 잠시 후 새로고침해 주세요.", "error");
+  };
+  waitForServices();
+}
+
 $("#search-form").addEventListener("submit", (event) => {
   event.preventDefault();
   searchCafes();
@@ -284,7 +301,7 @@ document.querySelectorAll(".radius-chip").forEach((chip) => {
 });
 
 if (window.kakao?.maps) {
-  kakao.maps.load(initMap);
+  kakao.maps.load(startAppWhenServicesReady);
 } else {
   setStatus("지도를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.", "error");
 }
